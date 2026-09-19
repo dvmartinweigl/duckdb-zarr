@@ -13,10 +13,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 - **`decode_times=` named parameter** on `read_zarr`: `read_zarr(store, decode_times := false)` restores the raw on-disk time offsets, mirroring `xarray.open_zarr(decode_times=False)`. This is the compatibility switch for the type change above.
+- **WebAssembly build** (`make wasm_mvp`): the extension compiles for `wasm32-unknown-emscripten` and loads in duckdb-wasm. `zarrs_http` (reqwest) is gated off wasm and every store is routed through `DuckDbStore`, so duckdb-wasm's HTTP filesystem does the fetching; rayon's global pool is built with the current thread as its only worker at extension init; C dependencies built by cc-rs (zstd-sys) get `-fPIC` for the wasm triple only. Native builds are unchanged. The wasm platforms remain in `excluded_platforms`.
 
 ### Fixed
 - Coordinate columns now honour their bind-time encoding when values are written. A coord's `ColumnEncoding` was resolved at bind (and drove its advertised DuckDB type) but the scan wrote every coord through the plain-scalar path, so a packed coordinate — integer on-disk with `scale_factor`/`add_offset` — was advertised as `DOUBLE` and then filled with its raw integer bits. Coords and data variables now share one encoding-aware filler.
 - A packed-int or CF-time column on-disk as `uint64` with a value above `i64::MAX` no longer silently decodes with a flipped sign. The raw-read helper bit-reinterprets `uint64` into `i64` for arithmetic, which wrapped such values negative; the true magnitude is now recovered before scaling, and an out-of-range CF-time offset decodes to `NULL` like any other unrepresentable instant.
+- `DuckDbStore::get_partial_many` loops on short reads instead of failing. DuckDB file systems may return fewer bytes than requested (duckdb-wasm's HTTP filesystem returns 16 KiB pieces).
 
 ## [0.1.3] - 2026-08-04
 

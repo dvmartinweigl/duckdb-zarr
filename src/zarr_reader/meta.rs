@@ -3,11 +3,14 @@ use std::path::Path;
 use std::sync::Arc;
 
 use base64::Engine as _;
+#[cfg(not(target_family = "wasm"))]
+use duckdb::ffi::duckdb_destroy_file_system;
 use duckdb::ffi::{
     duckdb_client_context, duckdb_client_context_get_file_system, duckdb_destroy_client_context,
-    duckdb_destroy_file_system, duckdb_file_system, duckdb_table_function_get_client_context,
+    duckdb_file_system, duckdb_table_function_get_client_context,
 };
 use zarrs::array::Array;
+#[cfg(not(target_family = "wasm"))]
 use zarrs::filesystem::FilesystemStore;
 use zarrs::storage::{Bytes, ReadableStorageTraits, StoreKey};
 
@@ -58,6 +61,7 @@ pub fn is_remote_scheme(path: &str) -> bool {
 /// - S3/GCS/Azure → `DuckDbStore` backed by the provided `file_system` handle
 ///   (the store takes ownership and destroys it on drop)
 /// - Local path → `zarrs::FilesystemStore` (destroys the handle if provided)
+/// - wasm32: every path → `DuckDbStore` (no `zarrs_http`, no host filesystem)
 ///
 /// Remote stores are additionally wrapped with an in-memory consolidated-
 /// metadata cache when one is available (see [`with_consolidated_cache`]),
@@ -68,6 +72,18 @@ pub fn open_store(
     file_system: Option<duckdb_file_system>,
 ) -> Result<ZarrStore, Box<dyn std::error::Error>> {
     let lower = path.to_ascii_lowercase();
+    // On wasm there is no reqwest::blocking and no host filesystem: every path
+    // (HTTP included, and files registered in duckdb-wasm's virtual FS) is read
+    // through DuckDB's own FileSystem via DuckDbStore.
+    #[cfg(target_family = "wasm")]
+    let store: ZarrStore = {
+        let _ = &lower;
+        let fs = file_system.ok_or(
+            "wasm build requires a DuckDB FileSystem handle (call from a table function bind)",
+        )?;
+        Arc::new(DuckDbStore::new(fs, path))
+    };
+    #[cfg(not(target_family = "wasm"))]
     let store: ZarrStore = if lower.starts_with("http://") || lower.starts_with("https://") {
         if let Some(mut fs) = file_system {
             unsafe { duckdb_destroy_file_system(&mut fs) };
