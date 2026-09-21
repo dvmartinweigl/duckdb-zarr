@@ -3,11 +3,14 @@ use std::path::Path;
 use std::sync::Arc;
 
 use base64::Engine as _;
+#[cfg(not(target_family = "wasm"))]
+use duckdb::ffi::duckdb_destroy_file_system;
 use duckdb::ffi::{
     duckdb_client_context, duckdb_client_context_get_file_system, duckdb_destroy_client_context,
-    duckdb_destroy_file_system, duckdb_file_system, duckdb_table_function_get_client_context,
+    duckdb_file_system, duckdb_table_function_get_client_context,
 };
 use zarrs::array::Array;
+#[cfg(not(target_family = "wasm"))]
 use zarrs::filesystem::FilesystemStore;
 use zarrs::storage::{Bytes, ReadableStorageTraits, StoreKey};
 
@@ -59,6 +62,7 @@ pub fn is_remote_scheme(path: &str) -> bool {
 /// - S3/GCS/Azure → `DuckDbStore` backed by the provided `file_system` handle
 ///   (the store takes ownership and destroys it on drop)
 /// - Local path → `zarrs::FilesystemStore` (destroys the handle if provided)
+/// - wasm32: every path → `DuckDbStore` (no `zarrs_http`, no host filesystem)
 ///
 /// Remote stores are additionally wrapped with an in-memory consolidated-
 /// metadata cache when one is available (see [`with_consolidated_cache`]),
@@ -69,6 +73,18 @@ pub fn open_store(
     file_system: Option<duckdb_file_system>,
 ) -> Result<ZarrStore, Box<dyn std::error::Error>> {
     let lower = path.to_ascii_lowercase();
+    // On wasm there is no reqwest::blocking and no host filesystem: every path
+    // (HTTP included, and files registered in duckdb-wasm's virtual FS) is read
+    // through DuckDB's own FileSystem via DuckDbStore.
+    #[cfg(target_family = "wasm")]
+    let store: ZarrStore = {
+        let _ = &lower;
+        let fs = file_system.ok_or(
+            "wasm build requires a DuckDB FileSystem handle (call from a table function bind)",
+        )?;
+        Arc::new(DuckDbStore::new(fs, path))
+    };
+    #[cfg(not(target_family = "wasm"))]
     let store: ZarrStore = if lower.starts_with("http://") || lower.starts_with("https://") {
         if let Some(mut fs) = file_system {
             unsafe { duckdb_destroy_file_system(&mut fs) };
@@ -507,9 +523,21 @@ pub fn parse_dtype(array: &ZarrArray, name: &str) -> Result<ZarrDtype, Box<dyn s
 /// Parse `ColumnEncoding` and `FillSentinel` from CF attrs.
 ///
 /// Packed-int rule: integer on-disk dtype AND (scale_factor OR add_offset in attrs).
+/// CF-time rule: `units` parses as `"<step> since <reference>"` on a decodable
+/// calendar, and the column is not already claimed by packed-int decoding.
+/// `decode_times = false` (the `decode_times=` named parameter) suppresses the
+/// latter and leaves the raw offsets visible, mirroring `xarray.open_zarr`.
+///
+/// Packed-int deliberately takes priority: CF §8.1 permits packing *any* numeric
+/// variable, including a time axis, but no store seen in practice packs time —
+/// it is already a compact int64/float64 — so a column with both `scale_factor`
+/// and CF-time `units` is decoded as the scaled physical quantity, not double
+/// -decoded into a scaled-then-CF-timestamped value. Combining the two would need
+/// its own `ColumnEncoding` variant for a case that has not shown up.
 pub fn parse_encoding_and_sentinel(
     dtype: &ZarrDtype,
     attrs: &serde_json::Map<String, serde_json::Value>,
+    decode_times: bool,
 ) -> (ColumnEncoding, Option<FillSentinel>) {
     let scale = attrs
         .get("scale_factor")
@@ -527,7 +555,14 @@ pub fn parse_encoding_and_sentinel(
             add_offset: offset,
         }
     } else {
-        ColumnEncoding::Plain
+        // Bool is excluded: a boolean column with a `units` attr is not a time axis.
+        match (decode_times && *dtype != ZarrDtype::Bool)
+            .then(|| super::cftime::parse(attrs))
+            .flatten()
+        {
+            Some(cf) => ColumnEncoding::CfTime(cf),
+            None => ColumnEncoding::Plain,
+        }
     };
 
     let sentinel = parse_sentinel(dtype, attrs);
@@ -865,11 +900,12 @@ pub fn discover_dim_groups(
 pub fn load_coord_array(
     store: &ZarrStore,
     coord_name: &str,
+    decode_times: bool,
 ) -> Result<CoordArray, Box<dyn std::error::Error>> {
     let arr = open_array(store, coord_name)?;
     let dtype = parse_dtype(&arr, coord_name)?;
     let attrs = arr.attributes().clone();
-    let (encoding, sentinel) = parse_encoding_and_sentinel(&dtype, &attrs);
+    let (encoding, sentinel) = parse_encoding_and_sentinel(&dtype, &attrs, decode_times);
     let sentinel = sentinel.or_else(|| parse_zarr_fill_sentinel(&arr, &dtype));
     let shape = arr.shape().to_vec();
     let n = shape[0] as usize;
@@ -945,6 +981,7 @@ pub fn build_column_defs(
     store: &ZarrStore,
     group: &DimGroup,
     coord_arrays: &HashMap<String, CoordArray>,
+    decode_times: bool,
 ) -> Result<Vec<ColumnDef>, Box<dyn std::error::Error>> {
     let mut cols = Vec::new();
 
@@ -978,7 +1015,7 @@ pub fn build_column_defs(
         let arr = open_array(store, var_name)?;
         let dtype = parse_dtype(&arr, var_name)?;
         let attrs = arr.attributes().clone();
-        let (encoding, sentinel) = parse_encoding_and_sentinel(&dtype, &attrs);
+        let (encoding, sentinel) = parse_encoding_and_sentinel(&dtype, &attrs, decode_times);
         let sentinel = sentinel.or_else(|| parse_zarr_fill_sentinel(&arr, &dtype));
         cols.push(ColumnDef {
             name: var_name.clone(),
