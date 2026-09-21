@@ -308,7 +308,7 @@ CF-encoded time appears in real stores as `int32`, `int64`, `float32`, or `float
 
 ### Variable-length strings (`string` / vlen-utf8)
 
-Unlike every other supported dtype, `ZarrDtype::String` has no fixed `byte_size()` — each element is its own UTF-8 byte run, not a fixed-width slot in a flat buffer. This is the on-disk encoding anndata (and zarr-python generally) use for `obs`/`var` text columns such as `gene_symbol` (issue #40), as either the Zarr v3 `string` dtype or the Zarr v2 `dtype: "|O"` + `filters: [{"id": "vlen-utf8"}]` pair — `zarrs` normalizes both to the same `string` data type at open time, so the reader doesn't need to special-case v2.
+Unlike other supported dtypes, `ZarrDtype::String` has no fixed `byte_size()` — each element is its own UTF-8 byte run, not a fixed-width slot in a flat buffer. This is the on-disk encoding [anndata](https://github.com/scverse/anndata) (and [zarr-python](https://github.com/zarr-developers/zarr-python) generally) use for `obs`/`var` text columns such as `gene_symbol` ([see here for more background from the context of `duckdb-zarr`](https://github.com/xqlsystems/duckdb-zarr/issues/40)), as either the Zarr v3 `string` dtype or the Zarr v2 `dtype: "|O"` + `filters: [{"id": "vlen-utf8"}]` pair — `zarrs` normalizes both to the same `string` data type at open time, so the reader doesn't need to special-case v2.
 
 Because the rest of the reader is built around `ColumnEncoding`/byte-offset math (`retrieve_chunk::<ArrayBytes<'static>>().into_fixed()`, indexed by `dtype.byte_size()`), string columns take a parallel path everywhere a byte buffer would otherwise be read or decoded:
 
