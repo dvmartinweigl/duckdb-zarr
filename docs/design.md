@@ -301,7 +301,7 @@ The base dtype mapping is mechanical:
 | CF-encoded time (`f4/f8/i4/i8`)    | `FLOAT`/`DOUBLE`/`INTEGER`/`BIGINT`      | raw on-disk dtype; CF decoding deferred     |
 | `S<n>` (fixed bytes)               | `BLOB`                                   | not yet implemented; error at bind          |
 | `U<n>` (UTF-32)                    | `VARCHAR`                                | not yet implemented; error at bind          |
-| `string` (v3) / `|O`+vlen-utf8 (v2) | `VARCHAR`                                | variable-length; see below                  |
+| `string` (v3) / `\|O`+vlen-utf8 (v2) | `VARCHAR`                                | variable-length; see below                  |
 | structured / other object          | unsupported                              | error at bind                               |
 
 CF-encoded time appears in real stores as `int32`, `int64`, `float32`, or `float64` depending on the source NetCDF — RASM uses `f8` + `noleap`, `air_temperature` uses `f4` + `gregorian`, ERA5-style stores use `i8`. We surface the raw on-disk dtype; decoding is deferred (see Phased plan / Later and decision 3). The `units` and `calendar` attrs ride along into `read_zarr_metadata.attrs` so users know what they're decoding against.
