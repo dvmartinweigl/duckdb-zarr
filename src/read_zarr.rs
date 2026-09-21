@@ -470,7 +470,10 @@ fn fill_chunk_slice(
                 if let Some(ca) = coord_arrays.get(&col_def.name) {
                     match &ca.data {
                         ColumnValues::Fixed(bytes) => {
-                            let elem_size = ca.dtype.byte_size();
+                            let elem_size = ca
+                                .dtype
+                                .byte_size()
+                                .expect("Fixed column values imply a fixed-width dtype");
                             crate::zarr_reader::scan::fill_scalar_element_pub(
                                 &mut vector,
                                 bytes,
@@ -501,7 +504,10 @@ fn fill_chunk_slice(
                 // Data variable: use zarrs_flat to index into the physical byte buffer.
                 match chunk_bytes.get(&col_def.name) {
                     Some(ColumnValues::Fixed(bytes)) => {
-                        let elem_size = col_def.on_disk_dtype.byte_size();
+                        let elem_size = col_def
+                            .on_disk_dtype
+                            .byte_size()
+                            .expect("Fixed column values imply a fixed-width dtype");
                         fill_data_element(
                             &mut vector,
                             bytes,

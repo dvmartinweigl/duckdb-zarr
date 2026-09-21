@@ -894,7 +894,9 @@ pub fn load_coord_array(
         let bytes: Vec<u8> = raw.into_owned();
         debug_assert_eq!(
             bytes.len(),
-            n * dtype.byte_size(),
+            n * dtype
+                .byte_size()
+                .expect("Fixed column values imply a fixed-width dtype"),
             "coord byte count mismatch for '{coord_name}'"
         );
         ColumnValues::Fixed(bytes)
