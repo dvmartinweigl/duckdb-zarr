@@ -8,17 +8,17 @@
 
 require zarr
 
-# ── string_var (Zarr v3) ──────────────────────────────────────────────────────
+# ── string_var_v3 (Zarr v3) ──────────────────────────────────────────────────────
 # One data variable `gene_symbol` (dtype `string`) over dim `var`; row 2 is the
 # empty string (the dtype's default fill_value).
 
 query I
-SELECT COUNT(*) FROM read_zarr('test/fixtures/xarray_tutorial/string_var.zarr');
+SELECT COUNT(*) FROM read_zarr('test/fixtures/xarray_tutorial/string_var_v3.zarr');
 ----
 5
 
 query II
-SELECT var, gene_symbol FROM read_zarr('test/fixtures/xarray_tutorial/string_var.zarr') ORDER BY var;
+SELECT var, gene_symbol FROM read_zarr('test/fixtures/xarray_tutorial/string_var_v3.zarr') ORDER BY var;
 ----
 0	Actb
 1	Gapdh
@@ -28,24 +28,24 @@ SELECT var, gene_symbol FROM read_zarr('test/fixtures/xarray_tutorial/string_var
 
 # Reported as VARCHAR, so ordinary string predicates and functions apply.
 query I
-SELECT COUNT(*) FROM read_zarr('test/fixtures/xarray_tutorial/string_var.zarr') WHERE gene_symbol = 'Myc';
+SELECT COUNT(*) FROM read_zarr('test/fixtures/xarray_tutorial/string_var_v3.zarr') WHERE gene_symbol = 'Myc';
 ----
 1
 
 query I
-SELECT COUNT(*) FROM read_zarr('test/fixtures/xarray_tutorial/string_var.zarr') WHERE gene_symbol = '';
+SELECT COUNT(*) FROM read_zarr('test/fixtures/xarray_tutorial/string_var_v3.zarr') WHERE gene_symbol = '';
 ----
 1
 
 query I
-SELECT UPPER(gene_symbol) FROM read_zarr('test/fixtures/xarray_tutorial/string_var.zarr') WHERE var = 0;
+SELECT UPPER(gene_symbol) FROM read_zarr('test/fixtures/xarray_tutorial/string_var_v3.zarr') WHERE var = 0;
 ----
 ACTB
 
 # read_zarr_metadata reports the raw on-disk dtype string. zarrs prints both
 # the v3 and v2 names when they differ ("string" vs. `|O`).
 query I
-SELECT dtype FROM read_zarr_metadata('test/fixtures/xarray_tutorial/string_var.zarr') WHERE name = 'gene_symbol';
+SELECT dtype FROM read_zarr_metadata('test/fixtures/xarray_tutorial/string_var_v3.zarr') WHERE name = 'gene_symbol';
 ----
 string / |O
 
