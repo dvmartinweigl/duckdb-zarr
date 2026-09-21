@@ -345,8 +345,25 @@ def main() -> None:
     gene_symbol_da = xr.DataArray(gene_symbol, dims=["var"], coords={"var": var_idx})
     write_zarr(xr.Dataset({"gene_symbol": gene_symbol_da}), "string_var_v3")
 
+    # ── string_var_v3_2d (synthetic) ─────────────────────────────────────────
+    # Tests: string dtype (Zarr v3) where chunk_shape doesn't evenly divide the
+    # array shape — (3, 5) dims with (2, 3) chunks, so the last row-chunk and
+    # last col-chunk are both boundary chunks padded past the array's logical
+    # bound. Exercises the zarrs_flat physical-offset math against a
+    # Vec<String> decode buffer (see docs/design.md, "Variable-length strings").
+    print("string_var_v3_2d (synthetic)...")
+    n_row, n_col = 3, 5
+    row_idx = np.arange(n_row, dtype="int64")
+    col_idx = np.arange(n_col, dtype="int64")
+    grid = np.array(
+        [[f"r{r}c{c}" for c in range(n_col)] for r in range(n_row)], dtype=object)
+    grid_da = xr.DataArray(grid, dims=["row", "col"],
+                            coords={"row": row_idx, "col": col_idx})
+    write_zarr(xr.Dataset({"grid": grid_da}), "string_var_v3_2d",
+               encoding={"grid": {"chunks": [2, 3]}})
+
     # ── string_var_v2 (synthetic) ────────────────────────────────────────────
-    # Same data as string_var but written as Zarr v2: dtype `|O` with a
+    # Same data as string_var_v3 but written as Zarr v2: dtype `|O` with a
     # `vlen-utf8` filter — the exact on-disk encoding anndata (zarr-python)
     # uses for string columns in a pre-v3 `.zarr` store.
     print("string_var_v2 (synthetic)...")
