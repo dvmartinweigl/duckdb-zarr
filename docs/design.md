@@ -317,6 +317,8 @@ Because the rest of the reader is built around `ColumnEncoding`/byte-offset math
 - zarrs pads a boundary chunk's *element count* to the full nominal `chunk_shape` for every dtype uniformly (fill-value elements past the array's logical bound), so the existing `zarrs_flat` physical-offset math indexes correctly into a `Vec<String>` with no changes — covered by the `string_var_v3_2d` fixture ((3, 5) dims, (2, 3) chunks) in [string_dtype.test](../test/sql/string_dtype.test).
 - No NULL masking applies: `FillSentinel` only represents numeric sentinels (`Float`/`Int`/`UInt`, see [meta.rs](../src/zarr_reader/meta.rs)), so a `_FillValue`/`missing_value` attr on a string variable doesn't parse into a sentinel and every decoded string (including zarrs' own empty-string fill-value substitution) is written through as-is.
 
+### Packed integer decoding (CF §8.1)
+
 `ColumnEncoding::PackedInt` never applies to strings (its trigger condition requires an integer on-disk dtype), so packed-decoding and string decoding never intersect.
 
 A data variable whose **on-disk dtype is an integer type** (i8/u8/i16/u16/i32/u32/i64/u64) *and* that carries `scale_factor` and/or `add_offset` attrs is *packed*: the on-disk integer is a quantization of a real-valued measurement. **The integer dtype is required.** A float array that incidentally carries `scale_factor` as legacy metadata (measurement precision, grid resolution) must NOT be decoded — applying `scale * value + offset` to already-decoded floats would corrupt them by a factor of ~100×. The trigger condition is `integer_dtype AND (has scale_factor OR has add_offset)`, not the presence of attrs alone.
