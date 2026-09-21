@@ -11,6 +11,8 @@ Usage:
 Output:
     test/fixtures/xarray_tutorial/<name>.zarr
     test/fixtures/bioimage/ome_zarr/<name>.ome.zarr
+    test/fixtures/anndata/<name>.zarr (delegated to generate_anndata_fixtures.py,
+        its own pinned/isolated dependency set — see that file's docstring)
 
 Note on base64-encoded _FillValue: xarray encodes ALL float _FillValue attrs
 as base64 when writing zarr v3 — including non-NaN values like -9.97e36.
@@ -644,6 +646,19 @@ def main() -> None:
         http_ds.to_zarr(dest, zarr_format=3, consolidated=False)
         zarr.consolidate_metadata(str(dest))
         print(f"  wrote {dest}")
+
+    # ── anndata (real, non-synthetic) ────────────────────────────────────────
+    # Delegated to scripts/generate_anndata_fixtures.py via PEP 723 inline
+    # metadata so heavy deps (anndata/awkward/dask) stay isolated from this venv.
+    # Skipped if `uv` isn't installed to avoid zarr/numpy version clashes.
+    if shutil.which("uv"):
+        print("anndata (real, via scripts/generate_anndata_fixtures.py)...", flush=True)
+        subprocess.run(
+            ["uv", "run", str(ROOT / "scripts" / "generate_anndata_fixtures.py")],
+            check=True,
+        )
+    else:
+        print("Skipping anndata fixtures: uv not found (they need an isolated dependency set).")
 
     print("\nAll fixtures written.")
 
