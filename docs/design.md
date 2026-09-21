@@ -315,7 +315,7 @@ Because the rest of the reader is built around `ColumnEncoding`/byte-offset math
 - Decoding uses `retrieve_chunk::<Vec<String>>` / `retrieve_array_subset::<Vec<String>>` (zarrs' `ElementOwned` API) instead of `ArrayBytes::into_fixed()`, yielding one `String` per element directly.
 - `ColumnValues` (an enum of `Fixed(Vec<u8>)` or `Strings(Vec<String>)`) replaces the bare `Vec<u8>` used for a coordinate array's pre-loaded values and a data variable's per-chunk decode buffer, so both paths carry either representation.
 - zarrs pads a boundary chunk's *element count* to the full nominal `chunk_shape` for every dtype uniformly (fill-value elements past the array's logical bound), so the existing `zarrs_flat` physical-offset math indexes correctly into a `Vec<String>` with no changes — verified against a non-chunk-aligned 2-D string fixture during implementation.
-- No NULL masking applies: CF's `_FillValue`/`missing_value` sentinel convention is numeric-only, so every decoded string (including zarrs' own empty-string fill-value substitution) is written through as-is.
+- No NULL masking applies: `FillSentinel` only represents numeric sentinels (`Float`/`Int`/`UInt`, see [meta.rs](../src/zarr_reader/meta.rs)), so a `_FillValue`/`missing_value` attr on a string variable doesn't parse into a sentinel and every decoded string (including zarrs' own empty-string fill-value substitution) is written through as-is.
 
 `ColumnEncoding::PackedInt` never applies to strings (its trigger condition requires an integer on-disk dtype), so packed-decoding and string decoding never intersect.
 

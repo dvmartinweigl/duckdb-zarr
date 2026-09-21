@@ -622,8 +622,8 @@ fn parse_zarr_fill_sentinel(array: &ZarrArray, dtype: &ZarrDtype) -> Option<Fill
             let arr: [u8; 8] = bytes.try_into().ok()?;
             Some(FillSentinel::Float(f64::from_ne_bytes(arr)))
         }
-        // No CF sentinel convention for strings; a non-empty string fill_value
-        // (e.g. "N/A") is just the fill value, not something to mask as NULL.
+        // Unlike a numeric fill_value, a non-empty string fill_value (e.g. "N/A")
+        // is plausible real data, so we can't safely treat it as a NULL sentinel here.
         ZarrDtype::String => None,
     }
 }
